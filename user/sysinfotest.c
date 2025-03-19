@@ -140,6 +140,43 @@ void testbad() {
     exit(xstatus);
   }
 }
+void testloadavg() {
+  struct sysinfo info;
+  uint64 baseline, new_loadavg;
+  int status;
+  
+  sinfo(&info);
+  baseline = info.loadavg;
+
+  int pid = fork();
+  if (pid < 0) {
+      printf("sysinfotest: fork failed\n");
+      exit(1);
+  }
+
+  if (pid == 0) {
+      // Child process: chạy vòng lặp để giữ CPU bận
+      for (volatile int i = 0; i < 100000000; i++);
+      exit(0);
+  }
+
+  // Parent process: kiểm tra `loadavg`
+  sinfo(&info);
+  new_loadavg = info.loadavg;
+
+  if (new_loadavg <= baseline) {
+      printf("sysinfotest: FAIL loadavg did not increase (was %ld, now %ld)\n", baseline, new_loadavg);
+      exit(1);
+  }
+
+  wait(&status); // Đợi child process kết thúc
+
+  sinfo(&info);
+  if (info.loadavg != baseline) {
+      printf("sysinfotest: FAIL loadavg did not return to baseline (was %ld, now %ld)\n", baseline, info.loadavg);
+      exit(1);
+  }
+}
 
 int
 main(int argc, char *argv[])
@@ -148,6 +185,16 @@ main(int argc, char *argv[])
   testcall();
   testmem();
   testproc();
-  printf("sysinfotest: OK\n");
+  testloadavg();
+  /*
+  struct sysinfo info;
+  if (sysinfo(&info) < 0) {
+    printf("FAIL: sysinfo failed\n");
+    exit(1);
+  }
+  printf("Free memory: %ld\n", info.freemem);
+  printf("Number of processes: %ld\n", info.nproc);
+  printf("Load average: %ld\n", info.loadavg);
+  */
   exit(0);
 }

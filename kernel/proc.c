@@ -707,3 +707,22 @@ collect_nproc(void)
   }
   return cnt;
 }
+uint64 
+calculate_loadavg(void) 
+{
+  struct proc *p;
+  uint64 running_or_ready = 0;
+  uint64 total = 0;
+
+  for (p = proc; p < &proc[NPROC]; p++) {
+      if (p->state != UNUSED) {
+          total++;
+          if (p->state == RUNNING || p->state == RUNNABLE) {
+              running_or_ready++;
+          }
+      }
+  }
+
+  if (total == 0) return 0; // avoid divide by 0
+  return (running_or_ready * 100) / total; 
+}

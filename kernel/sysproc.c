@@ -9,6 +9,7 @@
 
 uint64 collect_freemem(void);
 uint64 collect_nproc(void);
+uint64 calculate_loadavg(void);
 
 uint64
 sys_exit(void)
@@ -106,8 +107,10 @@ sys_sysinfo(void)
 
   si.freemem = collect_freemem();
   si.nproc = collect_nproc();
-  
+  si.loadavg = calculate_loadavg();  // load avg
+
   if(copyout(p->pagetable, addr, (char*)&si, sizeof(si)) < 0)
     return -1;
   return 0;
 }
+
