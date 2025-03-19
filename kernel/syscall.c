@@ -101,6 +101,7 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
+extern uint64 sys_trace(void);
 extern uint64 sys_sysinfo(void);
 
 // An array mapping syscall numbers from syscall.h
@@ -127,8 +128,146 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+[SYS_trace]   sys_trace,
 [SYS_sysinfo] sys_sysinfo,
 };
+
+// Array of syscall names for the trace output
+static char *syscallnames[] = {
+  [SYS_fork]    "fork",
+  [SYS_exit]    "exit",
+  [SYS_wait]    "wait",
+  [SYS_pipe]    "pipe",
+  [SYS_read]    "read",
+  [SYS_kill]    "kill",
+  [SYS_exec]    "exec",
+  [SYS_fstat]   "fstat",
+  [SYS_chdir]   "chdir",
+  [SYS_dup]     "dup",
+  [SYS_getpid]  "getpid",
+  [SYS_sbrk]    "sbrk",
+  [SYS_sleep]   "sleep",
+  [SYS_uptime]  "uptime",
+  [SYS_open]    "open",
+  [SYS_write]   "write",
+  [SYS_mknod]   "mknod",
+  [SYS_unlink]  "unlink",
+  [SYS_link]    "link",
+  [SYS_mkdir]   "mkdir",
+  [SYS_close]   "close",
+  [SYS_trace]   "trace", // system call entry for tracing
+  [SYS_sysinfo] "sysinfo",
+};
+
+void
+argfd(int n, int *fd)
+{
+    *fd = argraw(n); // Fetch the raw argument
+}
+
+static void
+print_syscall_args(int num)
+{
+    uint64 arg0, arg1, arg2;
+
+    switch (num) {
+        case SYS_fork:
+            break; // No arguments
+        case SYS_exit:
+            argint(0, (int*)&arg0); // int status
+            printf(" status=%d", (int)arg0);
+            break;
+        case SYS_wait:
+            argaddr(0, &arg0); // int *status
+            printf(" status=%p", (void*)arg0);
+            break;
+        case SYS_pipe:
+            argaddr(0, &arg0); // int *fd
+            printf(" fd=%p", (void*)arg0);
+            break;
+        case SYS_read:
+            argfd(0, (int*)&arg0);    // int fd
+            argaddr(1, &arg1); // char *buf
+            argint(2, (int*)&arg2);  // int n
+            printf(" fd=%d buf=%p n=%d", (int)arg0, (void*)arg1, (int)arg2);
+            break;
+        case SYS_kill:
+            argint(0, (int*)&arg0); // int pid
+            printf(" pid=%d", (int)arg0);
+            break;
+        case SYS_exec:
+            argaddr(0, &arg0); // char *path
+            argaddr(1, &arg1); // char **argv
+            printf(" path=\"%s\" argv=%p", (char*)arg0, (void*)arg1);
+            break;
+        case SYS_fstat:
+            argfd(0, (int*)&arg0);    // int fd
+            argaddr(1, &arg1); // struct stat *st
+            printf(" fd=%d st=%p", (int)arg0, (void*)arg1);
+            break;
+        case SYS_chdir:
+            argaddr(0, &arg0); // char *path
+            printf(" path=\"%s\"", (char*)arg0);
+            break;
+        case SYS_dup:
+            argfd(0, (int*)&arg0); // int fd
+            printf(" fd=%d", (int)arg0);
+            break;
+        case SYS_getpid:
+            break;  // No arguments
+        case SYS_sbrk:
+            argint(0, (int*)&arg0); // int incr
+            printf(" incr=%d", (int)arg0);
+            break;
+        case SYS_sleep:
+            argint(0, (int*)&arg0); // int ticks
+            printf(" ticks=%d", (int)arg0);
+            break;
+        case SYS_uptime:
+            break; // No arguments
+        case SYS_open:
+            argaddr(0, &arg0); // char *path
+            argint(1, (int*)&arg1); // int mode
+            printf(" path=\"%s\" mode=%d", (char*)arg0, (int)arg1);
+            break;
+        case SYS_write:
+            argfd(0, (int*)&arg0);    // int fd
+            argaddr(1, &arg1); // char *buf
+            argint(2, (int*)&arg2);  // int n
+            printf(" fd=%d buf=%p n=%d", (int)arg0, (void*)arg1, (int)arg2);
+            break;
+        case SYS_mknod:
+            argaddr(0, &arg0); // char *path
+            argint(1, (int*)&arg1); // int mode
+            argint(2, (int*)&arg2); // int dev
+            printf(" path=\"%s\" mode=%d dev=%d", (char*)arg0, (int)arg1, (int)arg2);
+            break;
+        case SYS_unlink:
+            argaddr(0, &arg0); // char *path
+            printf(" path=\"%s\"", (char*)arg0);
+            break;
+        case SYS_link:
+            argaddr(0, &arg0); // char *old
+            argaddr(1, &arg1); // char *new
+            printf(" old=\"%s\" new=\"%s\"", (char*)arg0, (char*)arg1);
+            break;
+        case SYS_mkdir:
+            argaddr(0, &arg0); // char *path
+            printf(" path=\"%s\"", (char*)arg0);
+            break;
+        case SYS_close:
+            argfd(0, (int*)&arg0); // int fd
+            printf(" fd=%d", (int)arg0);
+            break;
+        case SYS_trace:
+            argint(0, (int*)&arg0); // int mask
+            printf(" mask=%d", (int)arg0);
+            break;
+        default:
+            printf(" [unknown]");
+            break;
+    }
+}
 
 void
 syscall(void)
@@ -136,14 +275,28 @@ syscall(void)
   int num;
   struct proc *p = myproc();
 
-  num = p->trapframe->a7;
-  if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    // Use num to lookup the system call function for num, call it,
-    // and store its return value in p->trapframe->a0
+  num = p->trapframe->a7; // Get the system call number from the trapframe
+  if (num > 0 && num < NELEM(syscalls) && syscalls[num]) {
+
+    // Check if tracing is enabled for this system call
+    if (p->trace_mask & (1 << num) && num < NELEM(syscallnames) && syscallnames[num]) {
+      // Print the system call name and return value placeholder
+      printf("%d: syscall %s", p->pid, syscallnames[num]);
+    }
+
+    // Execute the system call and store its return value
     p->trapframe->a0 = syscalls[num]();
+
+    // Print the return value if tracing is enabled
+    if (p->trace_mask & (1 << num)) {
+      printf(" -> %ld\n", p->trapframe->a0); // Print return value on the same line
+      print_syscall_args(num);              // Print arguments on the next line
+      printf("\n");                         // Add a newline for better readability
+    }
+
   } else {
-    printf("%d %s: unknown sys call %d\n",
-            p->pid, p->name, num);
+    // Handle unknown system calls
+    printf("%d %s: unknown sys call %d\n", p->pid, p->name, num);
     p->trapframe->a0 = -1;
   }
 }
