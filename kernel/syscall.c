@@ -159,6 +159,7 @@ static char *syscallnames[] = {
   [SYS_sysinfo] "sysinfo",
 };
 
+/*
 void
 argfd(int n, int *fd)
 {
@@ -268,6 +269,7 @@ print_syscall_args(int num)
             break;
     }
 }
+*/
 
 void
 syscall(void)
@@ -277,6 +279,21 @@ syscall(void)
 
   num = p->trapframe->a7; // Get the system call number from the trapframe
   if (num > 0 && num < NELEM(syscalls) && syscalls[num]) {
+
+    // Special case: Log the `trace` system call before updating the trace_mask
+    // -> Ensure trace system call can trace itself
+    if (num == SYS_trace) {
+      if (num < NELEM(syscallnames) && syscallnames[num]) {
+        printf("%d: syscall %s", p->pid, syscallnames[num]);
+      }
+
+      // Execute the `trace` system call and store its return value
+      p->trapframe->a0 = syscalls[num]();
+
+      // Print the return value for the `trace` system call
+      printf(" -> %ld\n", p->trapframe->a0);
+      return; // Exit early to avoid double logging
+    }
 
     // Check if tracing is enabled for this system call
     if (p->trace_mask & (1 << num) && num < NELEM(syscallnames) && syscallnames[num]) {
@@ -290,7 +307,7 @@ syscall(void)
     // Print the return value if tracing is enabled
     if (p->trace_mask & (1 << num)) {
       printf(" -> %ld\n", p->trapframe->a0); // Print return value on the same line
-      print_syscall_args(num);              // Print arguments on the next line
+      //print_syscall_args(num);              // Print arguments on the next line
       printf("\n");                         // Add a newline for better readability
     }
 
