@@ -194,7 +194,7 @@ main(int argc, char *argv[])
   }
   printf("Free memory: %ld\n", info.freemem);
   printf("Number of processes: %ld\n", info.nproc);
-  printf("Load average: %ld\n", info.loadavg);
+  printf("Load average: %ld.%ld\n", info.loadavg / 100, info.loadavg % 100);
   
   exit(0);
 }
