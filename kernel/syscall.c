@@ -159,12 +159,14 @@ static char *syscallnames[] = {
   [SYS_sysinfo] "sysinfo",
 };
 
-/*
+
 void
 argfd(int n, int *fd)
 {
     *fd = argraw(n); // Fetch the raw argument
 }
+
+
 
 static void
 print_syscall_args(int num)
@@ -197,9 +199,16 @@ print_syscall_args(int num)
             printf(" pid=%d", (int)arg0);
             break;
         case SYS_exec:
-            argaddr(0, &arg0); // char *path
-            argaddr(1, &arg1); // char **argv
-            printf(" path=\"%s\" argv=%p", (char*)arg0, (void*)arg1);
+            {
+              char path[MAXPATH]; // Buffer to store the string argument
+              if (argstr(0, path, MAXPATH) < 0) { // Fetch the string argument using argstr
+                  printf(" path=<invalid>");
+              } else {
+                  printf(" path=\"%s\"", path); // Print the valid string
+              }
+              argaddr(1, &arg1); // Fetch the argv argument
+              printf(" argv=%p", (void*)arg1); // Print the pointer to argv
+            }
             break;
         case SYS_fstat:
             argfd(0, (int*)&arg0);    // int fd
@@ -227,9 +236,16 @@ print_syscall_args(int num)
         case SYS_uptime:
             break; // No arguments
         case SYS_open:
-            argaddr(0, &arg0); // char *path
-            argint(1, (int*)&arg1); // int mode
-            printf(" path=\"%s\" mode=%d", (char*)arg0, (int)arg1);
+            {
+              char path[MAXPATH]; // Buffer to store the string argument
+              if (argstr(0, path, MAXPATH) < 0) { // Fetch the string argument using argstr
+                  printf(" path=<invalid>");
+              } else {
+                  printf(" path=\"%s\"", path); // Print the valid string
+              }
+              argint(1, (int*)&arg1);   // Fetch the mode argument
+              printf(" mode=%d", (int)arg1);
+            }
             break;
         case SYS_write:
             argfd(0, (int*)&arg0);    // int fd
@@ -269,7 +285,6 @@ print_syscall_args(int num)
             break;
     }
 }
-*/
 
 void
 syscall(void)
@@ -277,19 +292,24 @@ syscall(void)
   int num;
   struct proc *p = myproc();
 
+
   num = p->trapframe->a7; // Get the system call number from the trapframe
   if (num > 0 && num < NELEM(syscalls) && syscalls[num]) {
 
-    // Execute the system call and store its return value
-    p->trapframe->a0 = syscalls[num]();
+    
 
     // Print the return value if tracing is enabled
     if (p->trace_mask & (1 << num)) {
       // Print the system call name and return value placeholder
       printf("%d: syscall %s", p->pid, syscallnames[num]);
       printf(" -> %ld\n", p->trapframe->a0); // Print return value on the same line
-      //print_syscall_args(num);              // Print arguments on the next line
+      
+      printf("Args: ");
+      print_syscall_args(num);              // Print arguments on the next line
+      printf("\n\n");
     }
+    // Execute the system call and store its return value
+    p->trapframe->a0 = syscalls[num]();
 
   } else {
     // Handle unknown system calls
