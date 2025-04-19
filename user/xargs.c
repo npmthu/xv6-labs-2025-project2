@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
             arg_s = arg_e = buf;  // Reset buffer
             continue;
         }
-        if (ch == '\n' || ch == ' ') {  
+        if (ch == '\n') {  
             if (has_arg) {  
                 *arg_e = '\0';  // Null-terminate argument
                 
