@@ -2,33 +2,40 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
-int main(int argc, char* argv[]){
-    int fd[2];
-    pipe(fd);
+int main() {
+    int p1[2]; // pipe from parent to child
+    int p2[2]; // pipe from child to parent
+    pipe(p1);
+    pipe(p2);
 
-    fprintf(1, "Create pipe successfully\n");
-    char buff[1];
+    char buf[1] = {'x'};
 
-    // Fork
-    if(fork() == 0){
-        // Child process
-        if(read(fd[0], buff, 1) == 1){
-            fprintf(1, "%d: received ping\n", getpid());
-        }
-        if(write(fd[1], buff, 1) < 1){
-            fprintf(2, "Error: child write failed\n");
-        }
+    if (fork() == 0) {
+        // Child
+        close(p1[1]); // close write end of parent-to-child
+        close(p2[0]); // close read end of child-to-parent
+
+        read(p1[0], buf, 1); // receive ping
+        fprintf(1, "%d: received ping\n", getpid());
+
+        write(p2[1], buf, 1); // send pong
+        close(p1[0]);
+        close(p2[1]);
         exit(0);
-    } else{
+    } else {
         // Parent
-        if(write(fd[1], buff, 1) < 1){
-            fprintf(2, "Error: parent write failed\n");
-        }
+        close(p1[0]); // close read end of parent-to-child
+        close(p2[1]); // close write end of child-to-parent
+
+        write(p1[1], buf, 1); // send ping
+        read(p2[0], buf, 1); // receive pong
+        fprintf(1, "%d: received pong\n", getpid());
+
+        close(p1[1]);
+        close(p2[0]);
         wait(0);
-        if(read(fd[0], buff, 1) == 1){
-            fprintf(1, "%d: received pong\n", getpid());
-        }
     }
 
     exit(0);
 }
+
